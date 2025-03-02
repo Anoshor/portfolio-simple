@@ -127,21 +127,21 @@ const AdminConfig = () => {
   // Flatten all selected teams across all projects
   const allTeams = Object.values(projectTeams).flat();
 
-  // If the user unchecks the currently active team, reset activeTeam
+  // Reset activeTeam if it gets unchecked
   useEffect(() => {
     if (activeTeam && !allTeams.includes(activeTeam)) {
       setActiveTeam('');
     }
   }, [allTeams, activeTeam]);
 
-  // If the user changes the project selection so that currentProjectIndex is out of bounds:
+  // Ensure currentProjectIndex is valid
   useEffect(() => {
     if (selectedProjects.length > 0 && currentProjectIndex >= selectedProjects.length) {
       setCurrentProjectIndex(0);
     }
   }, [selectedProjects, currentProjectIndex]);
 
-  // Get the full list of members for a team from ConfigData
+  // Get full list of members for a team from ConfigData
   const getTeamMembersList = (teamName: string) => {
     const selectedTeamData = ConfigData.TeamList.find((t) => t['Team Name'] === teamName);
     if (selectedTeamData && selectedTeamData.Members) {
@@ -161,7 +161,6 @@ const AdminConfig = () => {
   // -----------------------
   //       Handlers
   // -----------------------
-  // Add new org
   const handleAddNewOrg = () => {
     if (newOrgName.trim()) {
       setOrganizations((prev) => [...prev, newOrgName.trim()]);
@@ -172,13 +171,10 @@ const AdminConfig = () => {
     }
   };
 
-  // Toggle project selection
   const handleProjectToggle = (project: string) => {
     setSelectedProjects((prev) => {
       if (prev.includes(project)) {
-        // Removing
         const updated = prev.filter((p) => p !== project);
-        // Also remove the project from projectTeams
         setProjectTeams((prevTeams) => {
           const copy = { ...prevTeams };
           delete copy[project];
@@ -191,104 +187,73 @@ const AdminConfig = () => {
     });
   };
 
-  // Toggle team selection for a project
+  // Toggle a team's selection for the given project.
+  // When a team is added, ensure its member list is initialized and set it as active.
   const handleTeamCheckbox = (team: string, project: string) => {
     setProjectTeams((prev) => {
       const alreadySelected = prev[project] || [];
       let updatedTeams: string[];
-
       if (alreadySelected.includes(team)) {
-        // If already selected, remove it
         updatedTeams = alreadySelected.filter((t) => t !== team);
-
-        // Clear members for this team if removed
         setTeamMembers((prevMembers) => {
           const copy = { ...prevMembers };
           delete copy[team];
           return copy;
         });
-
-        // If that team was the active one, clear it
         if (team === activeTeam) {
           setActiveTeam('');
         }
       } else {
-        // Otherwise, add the team
         updatedTeams = [...alreadySelected, team];
-
-        // If we add the team, also ensure it has an entry in teamMembers
+        // Initialize the team members array if not present.
         if (!teamMembers[team]) {
           setTeamMembers((prevMembers) => ({
             ...prevMembers,
             [team]: [],
           }));
         }
-        // Make it the active team to see member selection immediately
+        // Set this team as active.
         setActiveTeam(team);
       }
-
-      return {
-        ...prev,
-        [project]: updatedTeams,
-      };
+      return { ...prev, [project]: updatedTeams };
     });
   };
 
-  // If the user clicks the label (the row) for a team
+  // When clicking on the team name label.
+  // If not selected, select it; otherwise, simply set it active.
   const handleSetActiveTeam = (team: string) => {
-    // If the team isn't selected yet, let's select it
     if (!currentProjectTeams.includes(team)) {
       handleTeamCheckbox(team, currentProject);
     } else {
-      // If it is already selected, just set it as active
       setActiveTeam(team);
     }
   };
 
-  // Toggle team member
   const handleTeamMemberToggle = (member: string, team: string) => {
     setTeamMembers((prev) => {
       const alreadySelected = prev[team] || [];
       if (alreadySelected.includes(member)) {
-        return {
-          ...prev,
-          [team]: alreadySelected.filter((m) => m !== member),
-        };
+        return { ...prev, [team]: alreadySelected.filter((m) => m !== member) };
       }
-      return {
-        ...prev,
-        [team]: [...alreadySelected, member],
-      };
+      return { ...prev, [team]: [...alreadySelected, member] };
     });
   };
 
-  // Select all / Deselect all members
   const handleToggleAllMembers = (team: string) => {
-    const isCurrentlySelectAll = selectAllStatus[team] || false;
-    const allTeamMembers = getTeamMembersList(team);
-
-    setTeamMembers((prev) => ({
-      ...prev,
-      [team]: isCurrentlySelectAll ? [] : allTeamMembers,
-    }));
-
-    setSelectAllStatus((prev) => ({
-      ...prev,
-      [team]: !isCurrentlySelectAll,
-    }));
+    const isSelectAll = selectAllStatus[team] || false;
+    const allMembers = getTeamMembersList(team);
+    setTeamMembers((prev) => ({ ...prev, [team]: isSelectAll ? [] : allMembers }));
+    setSelectAllStatus((prev) => ({ ...prev, [team]: !isSelectAll }));
   };
 
-  // Tabs for switching projects
   const handleProjectTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setCurrentProjectIndex(newValue);
     setActiveTeam('');
   };
 
-  // Step navigation
   const handleNext = () => {
     if (isStepValid()) {
       if (activeStep === steps.length - 1) {
-        // Save
         saveConfiguration();
       } else {
         setActiveStep((prev) => prev + 1);
@@ -297,6 +262,7 @@ const AdminConfig = () => {
       showValidationErrors();
     }
   };
+
   const handleBack = () => {
     setActiveStep((prev) => prev - 1);
   };
@@ -313,9 +279,7 @@ const AdminConfig = () => {
       case 1:
         errorMessage = 'Please select at least one project';
         break;
-      case 2:
-        // Must have at least one team for each selected project,
-        // and each selected team must have at least one member
+      case 2: {
         const eachProjectHasTeam = selectedProjects.every(
           (project) => (projectTeams[project]?.length || 0) > 0
         );
@@ -327,6 +291,7 @@ const AdminConfig = () => {
             'Each project must have at least one team, and each team must have at least one member.';
         }
         break;
+      }
       default:
         break;
     }
@@ -341,9 +306,7 @@ const AdminConfig = () => {
         return selectedOrg !== '';
       case 1:
         return selectedProjects.length > 0;
-      case 2:
-        // Make sure each project has >= 1 team
-        // and each selected team has >= 1 member
+      case 2: {
         const eachProjectHasTeam = selectedProjects.every(
           (project) => (projectTeams[project]?.length || 0) > 0
         );
@@ -351,23 +314,19 @@ const AdminConfig = () => {
           (team) => (teamMembers[team]?.length || 0) > 0
         );
         return eachProjectHasTeam && eachTeamHasMembers;
+      }
       default:
         return true;
     }
   };
 
-  const isProjectValid = (project: string): boolean => {
-    return (projectTeams[project]?.length || 0) > 0;
-  };
-  const isTeamValid = (team: string): boolean => {
-    return (teamMembers[team]?.length || 0) > 0;
-  };
+  const isProjectValid = (project: string): boolean => (projectTeams[project]?.length || 0) > 0;
+  const isTeamValid = (team: string): boolean => (teamMembers[team]?.length || 0) > 0;
 
   // -----------------------
   //    Saving / Deleting
   // -----------------------
   const saveConfiguration = () => {
-    // Build the projects -> teams -> members mapping
     const projectsMap: Record<string, { teams: string[]; members: Record<string, string[]> }> = {};
     selectedProjects.forEach((project) => {
       const teamsForProject = projectTeams[project] || [];
@@ -375,22 +334,16 @@ const AdminConfig = () => {
       teamsForProject.forEach((team) => {
         membersForTeams[team] = teamMembers[team] || [];
       });
-      projectsMap[project] = {
-        teams: teamsForProject,
-        members: membersForTeams,
-      };
+      projectsMap[project] = { teams: teamsForProject, members: membersForTeams };
     });
-
     const newMapping: Mapping = {
       organization: selectedOrg,
       projects: projectsMap,
       timestamp: Date.now(),
     };
-
     const updatedMappings = [...savedMappings, newMapping];
     localStorage.setItem('adminMappings', JSON.stringify(updatedMappings));
     setSavedMappings(updatedMappings);
-
     showSnackbar('Configuration saved successfully!', 'success');
     resetForm();
   };
@@ -444,7 +397,6 @@ const AdminConfig = () => {
             <Typography variant="h6" gutterBottom>
               Select Organization
             </Typography>
-
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 4 }}>
               <FormControl fullWidth>
                 <InputLabel>Organization</InputLabel>
@@ -460,7 +412,6 @@ const AdminConfig = () => {
                   ))}
                 </Select>
               </FormControl>
-
               <Button
                 variant="contained"
                 onClick={() => setOpenNewOrgDialog(true)}
@@ -470,8 +421,6 @@ const AdminConfig = () => {
                 Add New
               </Button>
             </Box>
-
-            {/* Saved Mappings */}
             {savedMappings.length > 0 && (
               <Box sx={{ mt: 4 }}>
                 <Typography variant="h6" gutterBottom>
@@ -489,9 +438,7 @@ const AdminConfig = () => {
                       <Card key={index} variant="outlined" sx={{ width: 280 }}>
                         <CardHeader
                           title={mapping.organization}
-                          subheader={`Created: ${new Date(
-                            mapping.timestamp
-                          ).toLocaleDateString()}`}
+                          subheader={`Created: ${new Date(mapping.timestamp).toLocaleDateString()}`}
                           titleTypographyProps={{ variant: 'subtitle1' }}
                           action={
                             <IconButton
@@ -529,8 +476,6 @@ const AdminConfig = () => {
                 Select Projects for {selectedOrg}
               </Typography>
             </Box>
-
-            {/* Projects Search */}
             <TextField
               fullWidth
               size="small"
@@ -553,17 +498,8 @@ const AdminConfig = () => {
                 ),
               }}
             />
-
-            {/* Selection Summary */}
             {selectedProjects.length > 0 && (
-              <Box
-                sx={{
-                  mb: 3,
-                  p: 2,
-                  bgcolor: alpha(theme.palette.primary.light, 0.1),
-                  borderRadius: 1,
-                }}
-              >
+              <Box sx={{ mb: 3, p: 2, bgcolor: alpha(theme.palette.primary.light, 0.1), borderRadius: 1 }}>
                 <Typography variant="subtitle2" gutterBottom>
                   Selected Projects ({selectedProjects.length}):
                 </Typography>
@@ -580,16 +516,7 @@ const AdminConfig = () => {
                 </Box>
               </Box>
             )}
-
-            {/* Project Checkboxes */}
-            <Paper
-              sx={{
-                maxHeight: 300,
-                overflow: 'auto',
-                p: 2,
-                border: `1px solid ${theme.palette.divider}`,
-              }}
-            >
+            <Paper sx={{ maxHeight: 300, overflow: 'auto', p: 2, border: `1px solid ${theme.palette.divider}` }}>
               <FormGroup>
                 {filteredProjects.map((project) => (
                   <FormControlLabel
@@ -605,11 +532,9 @@ const AdminConfig = () => {
                 ))}
               </FormGroup>
             </Paper>
-
             <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
               Selected {selectedProjects.length} project(s)
             </Typography>
-
             {selectedProjects.length === 0 && (
               <Alert severity="info" sx={{ mt: 2 }}>
                 Please select at least one project to continue
@@ -624,8 +549,6 @@ const AdminConfig = () => {
             <Typography variant="h6" gutterBottom>
               Select Teams & Members
             </Typography>
-
-            {/* Project Tabs */}
             <Tabs
               value={currentProjectIndex}
               onChange={handleProjectTabChange}
@@ -655,22 +578,17 @@ const AdminConfig = () => {
                 );
               })}
             </Tabs>
-
-            {/* Content for the current Project */}
             {currentProject && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle1" gutterBottom color="primary">
                   Project: {currentProject} ({currentProjectIndex + 1}/{selectedProjects.length})
                 </Typography>
-
                 <Box sx={{ display: 'flex', gap: 4, mt: 2 }}>
                   {/* Left Column: Teams */}
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="subtitle2" gutterBottom>
                       Teams
                     </Typography>
-
-                    {/* Teams Search */}
                     <TextField
                       fullWidth
                       size="small"
@@ -693,8 +611,6 @@ const AdminConfig = () => {
                         ),
                       }}
                     />
-
-                    {/* List of Teams */}
                     <Paper sx={{ maxHeight: 300, overflow: 'auto', p: 2 }}>
                       <FormGroup>
                         {filteredTeams.map((team) => (
@@ -707,45 +623,34 @@ const AdminConfig = () => {
                               py: 0.5,
                               '&:hover': { bgcolor: 'rgba(0,0,0,0.04)' },
                             }}
+                            onClick={() => handleSetActiveTeam(team)}
                           >
-                            {/* Checkbox toggles selection */}
                             <Checkbox
                               checked={currentProjectTeams.includes(team)}
                               onChange={() => handleTeamCheckbox(team, currentProject)}
-                              // Stop the label from toggling selection again
-                              onClick={(ev) => ev.stopPropagation()}
                             />
-                            {/* Label sets activeTeam (or selects if not selected) */}
-                            <Box
-                              sx={{ ml: 1 }}
-                              onClick={() => handleSetActiveTeam(team)}
-                            >
+                            <Box sx={{ ml: 1 }}>
                               <Typography variant="body2">
-                                {team}
-                                {activeTeam === team && ' (Active)'}
+                                {team} {activeTeam === team && ' (Active)'}
                               </Typography>
                             </Box>
                           </Box>
                         ))}
                       </FormGroup>
                     </Paper>
-
                     <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
                       Selected {currentProjectTeams.length} team(s) for {currentProject}
                     </Typography>
                   </Box>
-
-                  {/* Right Column: Members for the activeTeam */}
+                  {/* Right Column: Members for activeTeam */}
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="subtitle2" gutterBottom>
                       {activeTeam
                         ? `Members of "${activeTeam}"`
                         : 'Select a team to view its members'}
                     </Typography>
-
                     {activeTeam && (
                       <>
-                        {/* Member Search */}
                         <TextField
                           fullWidth
                           size="small"
@@ -761,27 +666,15 @@ const AdminConfig = () => {
                             ),
                             endAdornment: !!memberSearchText && (
                               <InputAdornment position="end">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => setMemberSearchText('')}
-                                >
+                                <IconButton size="small" onClick={() => setMemberSearchText('')}>
                                   <ClearIcon />
                                 </IconButton>
                               </InputAdornment>
                             ),
                           }}
                         />
-
-                        {/* Selected Members Summary */}
                         {teamMembers[activeTeam]?.length > 0 && (
-                          <Box
-                            sx={{
-                              mb: 2,
-                              p: 2,
-                              bgcolor: 'background.default',
-                              borderRadius: 1,
-                            }}
-                          >
+                          <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
                             <Typography variant="body2" gutterBottom>
                               Selected Members ({teamMembers[activeTeam].length}):
                             </Typography>
@@ -798,8 +691,6 @@ const AdminConfig = () => {
                             </Box>
                           </Box>
                         )}
-
-                        {/* Select All / Deselect All */}
                         <Box sx={{ mb: 2 }}>
                           <Button
                             size="small"
@@ -810,8 +701,6 @@ const AdminConfig = () => {
                             {selectAllStatus[activeTeam] ? 'Deselect All' : 'Select All'}
                           </Button>
                         </Box>
-
-                        {/* Members checkboxes */}
                         <Paper sx={{ maxHeight: 300, overflow: 'auto', p: 2 }}>
                           <FormGroup>
                             {filteredMemberList.map((member) => (
@@ -843,16 +732,12 @@ const AdminConfig = () => {
             <Typography variant="h6" gutterBottom>
               Review Configuration
             </Typography>
-
-            {/* Organization */}
             <Paper sx={{ p: 2, mb: 3 }}>
               <Typography variant="subtitle1" color="primary" gutterBottom>
                 Organization
               </Typography>
               <Typography variant="body1">{selectedOrg}</Typography>
             </Paper>
-
-            {/* Projects & Teams & Members */}
             {selectedProjects.map((project) => (
               <Paper key={project} sx={{ p: 2, mb: 2 }}>
                 <Typography variant="subtitle1" color="primary" gutterBottom>
@@ -891,8 +776,6 @@ const AdminConfig = () => {
                 )}
               </Paper>
             ))}
-
-            {/* Summary Statistics */}
             <Box
               sx={{
                 mt: 3,
@@ -939,7 +822,7 @@ const AdminConfig = () => {
         </Button>
       </Box>
 
-      {/* Dialog for adding a new organization */}
+      {/* Dialog for new organization */}
       <Dialog open={openNewOrgDialog} onClose={() => setOpenNewOrgDialog(false)}>
         <DialogTitle>Add New Organization</DialogTitle>
         <DialogContent>
@@ -967,12 +850,7 @@ const AdminConfig = () => {
         onClose={() => setSnackbarOpen(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <Alert
-          onClose={() => setSnackbarOpen(false)}
-          severity={snackbarSeverity}
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} variant="filled" sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>
